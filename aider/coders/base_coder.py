@@ -240,6 +240,10 @@ class Coder:
             output = f"Weak model: {weak_model.name}"
             lines.append(output)
 
+        if main_model.large_context_retriever_model:
+            output = f"Large Context Retriever model: {main_model.large_context_retriever_model.name}"
+            lines.append(output)
+
         # Repo
         if self.repo:
             rel_repo_dir = self.repo.get_rel_repo_dir()
