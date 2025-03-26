@@ -27,37 +27,6 @@ def install_from_main_branch(io):
 
 
 def install_upgrade(io, latest_version=None):
-    """
-    Install the latest version of aider from PyPI.
-    """
-
-    if latest_version:
-        new_ver_text = f"Newer aider version v{latest_version} is available."
-    else:
-        new_ver_text = "Install latest version of aider?"
-
-    docker_image = os.environ.get("AIDER_DOCKER_IMAGE")
-    if docker_image:
-        text = f"""
-{new_ver_text} To upgrade, run:
-
-    docker pull {docker_image}
-"""
-        io.tool_warning(text)
-        return True
-
-    success = utils.check_pip_install_extra(
-        io,
-        None,
-        new_ver_text,
-        ["aider-chat"],
-        self_update=True,
-    )
-
-    if success:
-        io.tool_output("Re-run aider to use new version.")
-        sys.exit()
-
     return
 
 
@@ -84,9 +53,9 @@ def check_version(io, just_check=False, verbose=False):
             io.tool_output(f"Current version: {current_version}")
             io.tool_output(f"Latest version: {latest_version}")
 
-        is_update_available = packaging.version.parse(latest_version) > packaging.version.parse(
-            current_version
-        )
+        is_update_available = packaging.version.parse(
+            latest_version
+        ) > packaging.version.parse(current_version)
     except Exception as err:
         io.tool_error(f"Error checking pypi for new version: {err}")
         return False

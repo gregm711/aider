@@ -9,6 +9,7 @@ from .editor_whole_coder import EditorWholeFileCoder
 from .help_coder import HelpCoder
 from .udiff_coder import UnifiedDiffCoder
 from .wholefile_coder import WholeFileCoder
+from .large_context_retriever import LargeContextRetriever
 
 # from .single_wholefile_func_coder import SingleWholeFileFunctionCoder
 
@@ -25,4 +26,5 @@ __all__ = [
     EditorEditBlockCoder,
     EditorWholeFileCoder,
     ContextCoder,
+    LargeContextRetriever,
 ]

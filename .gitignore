@@ -16,3 +16,7 @@ aider/_version.py
 .#*
 .gitattributes
 tmp.benchmarks/
+venv/
+.env
+gitingest_test.py
+vnow_aider_chat.egg-info/
