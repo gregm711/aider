@@ -208,6 +208,12 @@ def get_parser(default_config_files, git_root):
             " If unspecified, defaults to the model's max_chat_history_tokens."
         ),
     )
+    group.add_argument(
+        "--large-context-retriever-model",
+        metavar="LARGE_CONTEXT_RETRIEVER_MODEL",
+        default=None,
+        help="Specify the model to use for large context retrieval (default: same as the main model)",
+    )
 
     ##########
     group = parser.add_argument_group("Cache settings")
@@ -251,10 +257,14 @@ def get_parser(default_config_files, git_root):
     ##########
     group = parser.add_argument_group("History Files")
     default_input_history_file = (
-        os.path.join(git_root, ".aider.input.history") if git_root else ".aider.input.history"
+        os.path.join(git_root, ".aider.input.history")
+        if git_root
+        else ".aider.input.history"
     )
     default_chat_history_file = (
-        os.path.join(git_root, ".aider.chat.history.md") if git_root else ".aider.chat.history.md"
+        os.path.join(git_root, ".aider.chat.history.md")
+        if git_root
+        else ".aider.chat.history.md"
     )
     group.add_argument(
         "--input-history-file",

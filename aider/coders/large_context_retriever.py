@@ -39,13 +39,17 @@ class LargeContextRetriever(Coder):
         try:
             root = ET.fromstring(f"<response>{xml_match.group(1)}</response>")
             thinking = root.find("thinking")
-            if thinking is not None:
+            if thinking is not None and thinking.text:
                 result["thinking"] = [thinking.text.strip()]
             result["include_patterns"] = [
-                p.text.strip() for p in root.findall(".//include_patterns/pattern")
+                p.text.strip()
+                for p in root.findall(".//include_patterns/pattern")
+                if p.text
             ]
             result["exclude_patterns"] = [
-                p.text.strip() for p in root.findall(".//exclude_patterns/pattern")
+                p.text.strip()
+                for p in root.findall(".//exclude_patterns/pattern")
+                if p.text
             ]
         except ET.ParseError as e:
             self.io.tool_warning(f"XML parsing failed: {e}")
@@ -62,10 +66,13 @@ class LargeContextRetriever(Coder):
         all_files = set(self.get_all_relative_files())
         combined_excludes = set(exclude_patterns + self.get_default_exclude_patterns())
 
-        included_files = set()
-        for pattern in include_patterns:
-            matched_files = fnmatch.filter(all_files, pattern)
-            included_files.update(matched_files)
+        if not include_patterns:
+            included_files = all_files
+        else:
+            included_files = set()
+            for pattern in include_patterns:
+                matched_files = fnmatch.filter(all_files, pattern)
+                included_files.update(matched_files)
 
         final_files = {
             file
@@ -87,9 +94,14 @@ class LargeContextRetriever(Coder):
 
         if matched_files:
             self.abs_fnames = {self.abs_root_path(f) for f in matched_files}
-            self.io.tool_output(f"Added {len(matched_files)} files to chat.")
+            file_list = ", ".join(sorted(matched_files))
+            self.io.tool_output(
+                f"Added {len(matched_files)} files to chat: {file_list}"
+            )
         else:
-            self.io.tool_warning("No files matched the patterns provided.")
+            self.io.tool_warning(
+                "No files matched the patterns provided; clearing file selection."
+            )
             self.abs_fnames.clear()
 
         return True

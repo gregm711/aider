@@ -4,7 +4,7 @@ from .base_prompts import CoderPrompts
 
 
 class LargeContextRetrieverPrompts(CoderPrompts):
-    main_system = """AYou are an expert at understanding website and product requests, analyzing a codebase, and returning the optimal file patterns to select only the most relevant files for future processing.
+    main_system = """You are an expert at understanding website and product requests, analyzing a codebase, and returning the optimal file patterns to select only the most relevant files for future processing.
 IMPORTANT: The following common directories and files are ALREADY EXCLUDED by default, so you don't need to manually exclude them:
 
 node_modules/

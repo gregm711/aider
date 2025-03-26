@@ -91,6 +91,7 @@ class Commands:
             model_name,
             editor_model=self.coder.main_model.editor_model.name,
             weak_model=self.coder.main_model.weak_model.name,
+            large_context_retriever_model=self.coder.main_model.large_context_retriever_model_name,
         )
         models.sanity_check_models(self.io, model)
         raise SwitchCoder(main_model=model)
@@ -103,6 +104,7 @@ class Commands:
             self.coder.main_model.name,
             editor_model=model_name,
             weak_model=self.coder.main_model.weak_model.name,
+            large_context_retriever_model=self.coder.main_model.large_context_retriever_model_name,
         )
         models.sanity_check_models(self.io, model)
         raise SwitchCoder(main_model=model)
@@ -115,6 +117,20 @@ class Commands:
             self.coder.main_model.name,
             editor_model=self.coder.main_model.editor_model.name,
             weak_model=model_name,
+            large_context_retriever_model=self.coder.main_model.large_context_retriever_model_name,
+        )
+        models.sanity_check_models(self.io, model)
+        raise SwitchCoder(main_model=model)
+
+    def cmd_large_context_retriever_model(self, args):
+        "Switch the Large Context Retriever Model to a new LLM"
+
+        model_name = args.strip()
+        model = models.Model(
+            self.coder.main_model.name,
+            editor_model=self.coder.main_model.editor_model.name,
+            weak_model=self.coder.main_model.weak_model.name,
+            large_context_retriever_model=model_name,
         )
         models.sanity_check_models(self.io, model)
         raise SwitchCoder(main_model=model)
@@ -190,10 +206,17 @@ class Commands:
             summarize_from_coder = False
         elif ef == "ask":
             summarize_from_coder = False
+        switch_kwargs = {}
 
+        # If switching to large context retriever mode, use the specified model
+        if ef == "large_context_retriever":
+            lcr_model_instance = self.coder.main_model.large_context_retriever_model
+            if lcr_model_instance is not self.coder.main_model:
+                switch_kwargs["main_model"] = lcr_model_instance
         raise SwitchCoder(
             edit_format=edit_format,
             summarize_from_coder=summarize_from_coder,
+            **switch_kwargs,
         )
 
     def completions_model(self):
@@ -1224,23 +1247,34 @@ class Commands:
 
         from aider.coders.base_coder import Coder
 
-        coder = Coder.create(
+        # Prepare arguments for Coder.create
+        create_kwargs = dict(
             io=self.io,
             from_coder=self.coder,
             edit_format=edit_format,
             summarize_from_coder=False,
         )
 
+        # If creating a temporary LCR coder, ensure it uses the correct LCR model instance
+        if edit_format == "large_context_retriever":
+            lcr_model_instance = self.coder.main_model.large_context_retriever_model
+            if lcr_model_instance is not self.coder.main_model:
+                create_kwargs["main_model"] = lcr_model_instance
+
+        # Create the temporary coder using the prepared arguments
+        coder = Coder.create(**create_kwargs)
+
         user_msg = args
+        # Run the temporary coder with the provided message
         coder.run(user_msg)
 
-        # Use the provided placeholder if any
+        # Switch back to the original coder's state, bringing history from the temp coder
         raise SwitchCoder(
-            edit_format=self.coder.edit_format,
+            edit_format=self.coder.edit_format,  # Ensure we switch back to the original format
             summarize_from_coder=False,
-            from_coder=coder,
+            from_coder=coder,  # Pass the temp coder to potentially merge history
             show_announcements=False,
-            placeholder=placeholder,
+            placeholder=placeholder,  # Use the placeholder if provided
         )
 
     def get_help_md(self):
@@ -1451,6 +1485,12 @@ class Commands:
         settings = format_settings(self.parser, self.args)
         announcements = "\n".join(self.coder.get_announcements())
         output = f"{announcements}\n{settings}"
+        if (
+            self.coder.main_model.large_context_retriever_model
+            and self.coder.main_model.large_context_retriever_model
+            is not self.coder.main_model
+        ):
+            output += f"\nlarge-context-retriever-model: {self.coder.main_model.large_context_retriever_model.name}"
         self.io.tool_output(output)
 
     def completions_raw_load(self, document, complete_event):

@@ -144,12 +144,8 @@ class Coder:
             io = from_coder.io
 
         if from_coder:
-            use_kwargs = dict(from_coder.original_kwargs)  # copy orig kwargs
+            use_kwargs = dict(from_coder.original_kwargs)
 
-            # If the edit format changes, we can't leave old ASSISTANT
-            # messages in the chat history. The old edit format will
-            # confused the new LLM. It may try and imitate it, disobeying
-            # the system prompt.
             done_messages = from_coder.done_messages
             if (
                 edit_format != from_coder.edit_format
@@ -159,17 +155,13 @@ class Coder:
                 try:
                     done_messages = from_coder.summarizer.summarize_all(done_messages)
                 except ValueError:
-                    # If summarization fails, keep the original messages and warn the user
                     io.tool_warning(
                         "Chat history summarization failed, continuing with full history"
                     )
 
-            # Bring along context from the old Coder
             update = dict(
                 fnames=list(from_coder.abs_fnames),
-                read_only_fnames=list(
-                    from_coder.abs_read_only_fnames
-                ),  # Copy read-only files
+                read_only_fnames=list(from_coder.abs_read_only_fnames),
                 done_messages=done_messages,
                 cur_messages=from_coder.cur_messages,
                 aider_commit_hashes=from_coder.aider_commit_hashes,
@@ -178,15 +170,19 @@ class Coder:
                 ignore_mentions=from_coder.ignore_mentions,
                 file_watcher=from_coder.file_watcher,
             )
-            use_kwargs.update(update)  # override to complete the switch
-            use_kwargs.update(kwargs)  # override passed kwargs
+            use_kwargs.update(update)
+            use_kwargs.update(kwargs)
 
             kwargs = use_kwargs
             from_coder.ok_to_warm_cache = False
 
         for coder in coders.__all__:
             if hasattr(coder, "edit_format") and coder.edit_format == edit_format:
-                res = coder(main_model, io, **kwargs)
+                res = coder(
+                    main_model,
+                    io,
+                    **kwargs,
+                )
                 res.original_kwargs = dict(kwargs)
                 return res
 

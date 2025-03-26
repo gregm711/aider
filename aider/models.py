@@ -171,7 +171,9 @@ class ModelInfoManager:
             import requests
 
             # Respect the --no-verify-ssl switch
-            response = requests.get(self.MODEL_INFO_URL, timeout=5, verify=self.verify_ssl)
+            response = requests.get(
+                self.MODEL_INFO_URL, timeout=5, verify=self.verify_ssl
+            )
             if response.status_code == 200:
                 self.content = response.json()
                 try:
@@ -234,7 +236,13 @@ model_info_manager = ModelInfoManager()
 
 class Model(ModelSettings):
     def __init__(
-        self, model, weak_model=None, editor_model=None, editor_edit_format=None, verbose=False
+        self,
+        model,
+        weak_model=None,
+        editor_model=None,
+        large_context_retriever_model=None,
+        editor_edit_format=None,
+        verbose=False,
     ):
         # Map any alias to its canonical name
         model = MODEL_ALIASES.get(model, model)
@@ -245,7 +253,7 @@ class Model(ModelSettings):
         self.max_chat_history_tokens = 1024
         self.weak_model = None
         self.editor_model = None
-
+        self.large_context_retriever_model = None
         # Find the extra settings
         self.extra_model_settings = next(
             (ms for ms in MODEL_SETTINGS if ms.name == "aider/extra_params"), None
@@ -273,6 +281,11 @@ class Model(ModelSettings):
             self.editor_model_name = None
         else:
             self.get_editor_model(editor_model, editor_edit_format)
+
+        if large_context_retriever_model is False:
+            self.large_context_retriever_model_name = None
+        else:
+            self.get_large_context_retriever_model(large_context_retriever_model)
 
     def get_model_info(self, model):
         return model_info_manager.get_model_info(model)
@@ -316,7 +329,9 @@ class Model(ModelSettings):
 
             # Deep merge the extra_params dicts
             for key, value in self.extra_model_settings.extra_params.items():
-                if isinstance(value, dict) and isinstance(self.extra_params.get(key), dict):
+                if isinstance(value, dict) and isinstance(
+                    self.extra_params.get(key), dict
+                ):
                     # For nested dicts, merge recursively
                     self.extra_params[key] = {**self.extra_params[key], **value}
                 else:
@@ -486,6 +501,20 @@ class Model(ModelSettings):
 
         return self.editor_model
 
+    def get_large_context_retriever_model(
+        self, provided_large_context_retriever_model_name
+    ):
+        if (
+            not provided_large_context_retriever_model_name
+            or provided_large_context_retriever_model_name == self.name
+        ):
+            self.large_context_retriever_model = self
+        else:
+            self.large_context_retriever_model = Model(
+                provided_large_context_retriever_model_name
+            )
+        return self.large_context_retriever_model
+
     def tokenizer(self, text):
         return litellm.encode(model=self.name, text=text)
 
@@ -594,7 +623,8 @@ class Model(ModelSettings):
 
         # If missing AWS credential keys but AWS_PROFILE is set, consider AWS credentials valid
         if res["missing_keys"] and any(
-            key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] for key in res["missing_keys"]
+            key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+            for key in res["missing_keys"]
         ):
             if model.startswith("bedrock/") or model.startswith("us.anthropic."):
                 if os.environ.get("AWS_PROFILE"):
@@ -685,7 +715,10 @@ class Model(ModelSettings):
             if self.name.startswith("openrouter/"):
                 self.extra_params["reasoning"] = {"max_tokens": num_tokens}
             else:
-                self.extra_params["thinking"] = {"type": "enabled", "budget_tokens": num_tokens}
+                self.extra_params["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": num_tokens,
+                }
 
     def get_thinking_tokens(self, model):
         """Get formatted thinking token budget if available"""
@@ -764,7 +797,10 @@ class Model(ModelSettings):
         if functions is not None:
             function = functions[0]
             kwargs["tools"] = [dict(type="function", function=function)]
-            kwargs["tool_choice"] = {"type": "function", "function": {"name": function["name"]}}
+            kwargs["tool_choice"] = {
+                "type": "function",
+                "function": {"name": function["name"]},
+            }
         if self.extra_params:
             kwargs.update(self.extra_params)
         if self.is_ollama() and "num_ctx" not in kwargs:
@@ -801,7 +837,11 @@ class Model(ModelSettings):
                 }
 
                 _hash, response = self.send_completion(**kwargs)
-                if not response or not hasattr(response, "choices") or not response.choices:
+                if (
+                    not response
+                    or not hasattr(response, "choices")
+                    or not response.choices
+                ):
                     return None
                 res = response.choices[0].message.content
                 from aider.reasoning_tags import remove_reasoning_content
@@ -843,14 +883,17 @@ def register_models(model_settings_fnames):
             for model_settings_dict in model_settings_list:
                 model_settings = ModelSettings(**model_settings_dict)
                 existing_model_settings = next(
-                    (ms for ms in MODEL_SETTINGS if ms.name == model_settings.name), None
+                    (ms for ms in MODEL_SETTINGS if ms.name == model_settings.name),
+                    None,
                 )
 
                 if existing_model_settings:
                     MODEL_SETTINGS.remove(existing_model_settings)
                 MODEL_SETTINGS.append(model_settings)
         except Exception as e:
-            raise Exception(f"Error loading model settings from {model_settings_fname}: {e}")
+            raise Exception(
+                f"Error loading model settings from {model_settings_fname}: {e}"
+            )
         files_loaded.append(model_settings_fname)
 
     return files_loaded
@@ -905,7 +948,20 @@ def sanity_check_models(io, main_model):
     ):
         problem_editor = sanity_check_model(io, main_model.editor_model)
 
-    return problem_main or problem_weak or problem_editor
+    problem_large_context_retriever = None
+    if (
+        main_model.large_context_retriever_model
+        and main_model.large_context_retriever_model is not main_model
+    ):
+        problem_large_context_retriever = sanity_check_model(
+            io, main_model.large_context_retriever_model
+        )
+    return (
+        problem_main
+        or problem_weak
+        or problem_editor
+        or problem_large_context_retriever
+    )
 
 
 def sanity_check_model(io, model):
@@ -927,7 +983,9 @@ def sanity_check_model(io, model):
 
     elif not model.keys_in_environment:
         show = True
-        io.tool_warning(f"Warning for {model}: Unknown which environment variables are required.")
+        io.tool_warning(
+            f"Warning for {model}: Unknown which environment variables are required."
+        )
 
     # Check for model-specific dependencies
     check_for_dependencies(io, model.name)
