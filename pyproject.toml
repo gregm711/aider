@@ -24,6 +24,7 @@ Homepage = "https://github.com/gregm711/aider"
 
 [project.scripts]
 vnow-aider-chat = "aider.main:main"
+vnow-aider-operator = "aider.cli.operator:main"
 
 [tool.setuptools.dynamic]
 dependencies = { file = "requirements.txt" }
