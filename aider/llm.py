@@ -41,6 +41,13 @@ class LazyLiteLLM:
         self._lazy_module.drop_params = True
         self._lazy_module._logging._disable_debugging()
 
+        if (
+            os.getenv("LANGFUSE_PUBLIC_KEY")
+            and os.getenv("LANGFUSE_SECRET_KEY")
+            and os.getenv("LANGFUSE_HOST")
+        ):
+            self._lazy_module.success_callback = ["langfuse"]
+
 
 litellm = LazyLiteLLM()
 
