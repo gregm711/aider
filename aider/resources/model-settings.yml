@@ -758,6 +758,21 @@
   system_prompt_prefix: "Formatting re-enabled. "
   accepts_settings: ["reasoning_effort"]
 
+- name: openrouter/google/gemini-2.0-flash-001
+  edit_format: whole
+  weak_model_name: openrouter/google/gemini-2.0-flash-lite-001
+  use_repo_map: true
+  streaming: false
+  editor_model_name: openrouter/google/gemini-2.0-flash-001
+  editor_edit_format: whole
+
+- name: openrouter/google/gemini-2.0-flash-lite-001
+  edit_format: whole
+  use_repo_map: true
+  streaming: false
+  editor_model_name: openrouter/google/gemini-2.0-flash-lite-001
+  editor_edit_format: whole
+
 - name: openai/o1
   edit_format: diff
   weak_model_name: openai/gpt-4o-mini
@@ -798,7 +813,7 @@
   use_temperature: false
   editor_model_name: openrouter/deepseek/deepseek-chat
   editor_edit_format: editor-diff
-  
+
 - name: fireworks_ai/accounts/fireworks/models/deepseek-r1
   edit_format: diff
   weak_model_name: fireworks_ai/accounts/fireworks/models/deepseek-v3
@@ -809,7 +824,7 @@
   editor_edit_format: editor-diff
   reasoning_tag: think
   extra_params:
-      max_tokens: 160000
+    max_tokens: 160000
 
 - name: fireworks_ai/accounts/fireworks/models/deepseek-v3
   edit_format: diff
@@ -817,7 +832,7 @@
   reminder: sys
   examples_as_sys_msg: true
   extra_params:
-      max_tokens: 128000
+    max_tokens: 128000
 
 - name: openai/o3-mini
   edit_format: diff
@@ -828,7 +843,7 @@
   editor_edit_format: editor-diff
   system_prompt_prefix: "Formatting re-enabled. "
   accepts_settings: ["reasoning_effort"]
-  
+
 - name: o3-mini
   edit_format: diff
   weak_model_name: gpt-4o-mini
@@ -878,7 +893,7 @@
   examples_as_sys_msg: true
   editor_model_name: gpt-4o
   editor_edit_format: editor-diff
-  
+
 - name: openai/gpt-4.5-preview
   edit_format: diff
   weak_model_name: gpt-4o-mini
@@ -900,8 +915,8 @@
   examples_as_sys_msg: true
   use_temperature: 0.6
   extra_params:
-      max_tokens: 32000
-      top_p: 0.95
+    max_tokens: 32000
+    top_p: 0.95
 
 - name: groq/qwen-qwq-32b
   reasoning_tag: think
@@ -912,8 +927,8 @@
   editor_edit_format: editor-diff
   use_temperature: 0.6
   extra_params:
-      max_tokens: 128000
-      top_p: 0.95
+    max_tokens: 128000
+    top_p: 0.95
 
 - name: cohere_chat/command-a-03-2025
   examples_as_sys_msg: true
@@ -923,13 +938,13 @@
 
 - name: gemini/gemma-3-27b-it
   use_system_prompt: false
-  
+
 - name: openrouter/google/gemma-3-27b-it:free
   use_system_prompt: false
-  
+
 - name: openrouter/google/gemma-3-27b-it
   use_system_prompt: false
-  
+
 - name: gemini/gemini-2.5-pro-exp-03-25
   edit_format: diff-fenced
   use_repo_map: true
@@ -941,4 +956,3 @@
 - name: vertex_ai/gemini-2.5-pro-exp-03-25
   edit_format: diff-fenced
   use_repo_map: true
-
