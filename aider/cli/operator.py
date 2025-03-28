@@ -130,7 +130,11 @@ def main():
         help="Use git features (repo map, commits) (default: True).",
     )
     parser.add_argument(
-        "--no-git", action="store_false", dest="git", help="Disable git features."
+        "--no-git",
+        action="store_false",
+        dest="git",
+        help="Disable git features.",
+        default=False,
     )
     parser.add_argument(  # Renamed from --no-auto-commits for clarity and mirroring
         "--auto-commits",
@@ -139,23 +143,41 @@ def main():
         default=True,  # Default to auto-commit
         help="Enable automatic commits after successful changes (default: True).",
     )
-    parser.add_argument(
-        "--no-auto-commits",
-        action="store_false",
-        dest="auto_commits",
-        help="Disable automatic commits by Aider.",
-    )
     parser.add_argument(  # Added from main.py
         "--dirty-commits",
         action="store_true",
         help="Allow adding files with unstaged changes to the chat",
         default=True,  # Consistent with aider default
     )
-    parser.add_argument(  # Added from main.py
-        "--no-dirty-commits",
-        action="store_false",
-        dest="dirty_commits",
-        help="Disallow adding files with unstaged changes to the chat",
+    parser.add_argument(
+        "--attribute-author",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Attribute aider code changes in the git author name (default: True)",
+    )
+    parser.add_argument(
+        "--attribute-committer",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Attribute aider commits in the git committer name (default: True)",
+    )
+    parser.add_argument(
+        "--attribute-commit-message-author",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Prefix commit messages with 'aider: ' if aider authored the changes (default: False)",
+    )
+    parser.add_argument(
+        "--attribute-commit-message-committer",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Prefix all commit messages with 'aider: ' (default: False)",
+    )
+    parser.add_argument(
+        "--git-commit-verify",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable/disable git pre-commit hooks with --no-verify (default: False)",
     )
     parser.add_argument(  # Added from main.py
         "--aiderignore",
@@ -164,38 +186,12 @@ def main():
         help=f"Specify the aider ignore file (default: {AIDERIGNORE_FNAME})",
     )
     parser.add_argument(  # Added from main.py
-        "--git-commit-verify",
-        action="store_true",
-        dest="git_commit_verify",
-        default=True,
-        help="Enable git commit --verify hooks (default: True)",
-    )
-    parser.add_argument(  # Added from main.py
-        "--no-git-commit-verify",
-        action="store_false",
-        dest="git_commit_verify",
-        help="Disable git commit --verify hooks",
-    )
-    parser.add_argument(  # Added from main.py
         "--gitignore",
         action="store_true",
         dest="gitignore",
         default=True,
         help="Check and update .gitignore (default: True)",
     )
-    parser.add_argument(  # Added from main.py
-        "--no-gitignore",
-        action="store_false",
-        dest="gitignore",
-        help="Skip checking/updating .gitignore",
-    )
-    parser.add_argument(  # Added from main.py
-        "--skip-sanity-check-repo",
-        action="store_true",
-        default=False,
-        help="Skip sanity checking the git repo",
-    )
-
     # Repo Map args (mirroring main.py)
     parser.add_argument(
         "--map-tokens",
@@ -230,6 +226,11 @@ def main():
         ),
         default=[],
     )
+    parser.add_argument(
+        "--commit-prompt",
+        metavar="PROMPT",
+        help="Specify a custom prompt for generating commit messages",
+    )
     parser.add_argument(  # Added from main.py
         "--encoding",
         default="utf-8",
@@ -239,6 +240,18 @@ def main():
         "--verbose",
         action="store_true",
         help="Enable verbose output from Aider and the operator.",
+    )
+    parser.add_argument(
+        "--subtree-only",
+        action="store_true",
+        help="Only consider files in the current subtree of the git repository",
+        default=False,
+    )
+    parser.add_argument(
+        "--skip-sanity-check-repo",
+        action="store_true",
+        help="Skip the sanity check for the git repository (default: False)",
+        default=False,
     )
     # Removed model settings/metadata file args - use standard search path
 
@@ -596,6 +609,11 @@ def main():
             "No initial files specified or found, LCR will determine context."
         )
 
+    if args.git:
+        git_root = setup_git(git_root, operator_io)
+        if args.gitignore:
+            check_gitignore(git_root, operator_io)
+
     # --- Initialize GitRepo ---
     if use_git and git_root:
         try:
@@ -614,12 +632,12 @@ def main():
                 git_dname=git_root,
                 aider_ignore_file=args.aiderignore,
                 models=commit_models,
-                attribute_author=None,
-                attribute_committer=None,
-                attribute_commit_message_author=None,
-                attribute_commit_message_committer=None,
-                commit_prompt=None,  # Use default commit prompt
-                subtree_only=False,
+                attribute_author=args.attribute_author,
+                attribute_committer=args.attribute_committer,
+                attribute_commit_message_author=args.attribute_commit_message_author,
+                attribute_commit_message_committer=args.attribute_commit_message_committer,
+                commit_prompt=args.commit_prompt,
+                subtree_only=args.subtree_only,
                 git_commit_verify=args.git_commit_verify,
             )
             operator_io.tool_output(f"Git repository initialized for {git_root}")
@@ -660,39 +678,94 @@ def main():
 
     # --- Execute Operator Core Logic ---
     operator_io.tool_output("--- Starting Aider Operator Execution ---")
+    # # try:
+    exit_code = run_aider_operator(
+        user_prompt=args.request,
+        initial_files=initial_abs_files,
+        read_only_files=read_only_abs_files,  # Pass read-only files separately
+        lcr_model=lcr_model_obj,
+        architect_model=architect_model_obj,
+        # Editor model isn't directly passed, architect_model has editor_model_name ref
+        operator_io=operator_io,
+        repo=repo,  # Pass repo object (might be None)
+        coder_root=coder_root,  # Pass the determined coder root
+        use_git=use_git,
+        auto_commits=args.auto_commits,
+        dirty_commits=args.dirty_commits,  # Pass dirty commits flag
+        verbose=args.verbose,
+        map_tokens=map_tokens,
+        map_refresh=args.map_refresh,
+        map_mul_no_files=args.map_multiplier_no_files,
+        # Pass other relevant args if run_aider_operator needs them
+        encoding=args.encoding,
+    )
+    operator_io.tool_output(f"--- Aider Operator Finished (Exit Code: {exit_code}) ---")
+    # return exit_code
+    # except Exception as e:
+    #     operator_io.tool_error(f"An error occurred during operator execution: {e}")
+    #     if args.verbose:
+    #         traceback.print_exc(file=sys.stderr)
+    #     operator_io.tool_output(f"--- Aider Operator Failed ---")
+    #     return 1
+
+
+def setup_git(git_root, io):
+    if git is None:
+        return
+
     try:
-        exit_code = run_aider_operator(
-            user_prompt=args.request,
-            initial_files=initial_abs_files,
-            read_only_files=read_only_abs_files,  # Pass read-only files separately
-            lcr_model=lcr_model_obj,
-            architect_model=architect_model_obj,
-            # Editor model isn't directly passed, architect_model has editor_model_name ref
-            operator_io=operator_io,
-            repo=repo,  # Pass repo object (might be None)
-            coder_root=coder_root,  # Pass the determined coder root
-            use_git=use_git,
-            auto_commits=args.auto_commits,
-            dirty_commits=args.dirty_commits,  # Pass dirty commits flag
-            verbose=args.verbose,
-            map_tokens=map_tokens,
-            map_refresh=args.map_refresh,
-            map_mul_no_files=args.map_multiplier_no_files,
-            # Pass other relevant args if run_aider_operator needs them
-            encoding=args.encoding,
+        cwd = Path.cwd()
+    except OSError:
+        cwd = None
+
+    repo = None
+
+    if git_root:
+        try:
+            repo = git.Repo(git_root)
+        except ANY_GIT_ERROR:
+            pass
+    elif cwd == Path.home():
+        io.tool_warning(
+            "You should probably run aider in your project's directory, not your home dir."
         )
-        operator_io.tool_output(
-            f"--- Aider Operator Finished (Exit Code: {exit_code}) ---"
-        )
-        return exit_code
-    except Exception as e:
-        operator_io.tool_error(f"An error occurred during operator execution: {e}")
-        if args.verbose:
-            traceback.print_exc(file=sys.stderr)
-        operator_io.tool_output(f"--- Aider Operator Failed ---")
-        return 1
+        return
+    elif cwd and io.confirm_ask(
+        "No git repo found, create one to track aider's changes (recommended)?"
+    ):
+        git_root = str(cwd.resolve())
+        repo = make_new_repo(git_root, io)
+
+    if not repo:
+        return
+
+    try:
+        user_name = repo.git.config("--get", "user.name") or None
+    except git.exc.GitCommandError:
+        user_name = None
+
+    try:
+        user_email = repo.git.config("--get", "user.email") or None
+    except git.exc.GitCommandError:
+        user_email = None
+
+    if user_name and user_email:
+        return repo.working_tree_dir
+
+    with repo.config_writer() as git_config:
+        if not user_name:
+            git_config.set_value("user", "name", "Your Name")
+            io.tool_warning('Update git name with: git config user.name "Your Name"')
+        if not user_email:
+            git_config.set_value("user", "email", "you@example.com")
+            io.tool_warning(
+                'Update git email with: git config user.email "you@example.com"'
+            )
+
+    return repo.working_tree_dir
 
 
 # Standard entry point guard
 if __name__ == "__main__":
-    sys.exit(main())
+    # sys.exit(main())
+    main()
