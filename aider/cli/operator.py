@@ -1,4 +1,4 @@
-# aider/cli/operator.py
+#!/usr/bin/env python
 import os
 import sys
 import argparse
@@ -678,35 +678,34 @@ def main():
 
     # --- Execute Operator Core Logic ---
     operator_io.tool_output("--- Starting Aider Operator Execution ---")
-    # # try:
-    exit_code = run_aider_operator(
-        user_prompt=args.request,
-        initial_files=initial_abs_files,
-        read_only_files=read_only_abs_files,  # Pass read-only files separately
-        lcr_model=lcr_model_obj,
-        architect_model=architect_model_obj,
-        # Editor model isn't directly passed, architect_model has editor_model_name ref
-        operator_io=operator_io,
-        repo=repo,  # Pass repo object (might be None)
-        coder_root=coder_root,  # Pass the determined coder root
-        use_git=use_git,
-        auto_commits=args.auto_commits,
-        dirty_commits=args.dirty_commits,  # Pass dirty commits flag
-        verbose=args.verbose,
-        map_tokens=map_tokens,
-        map_refresh=args.map_refresh,
-        map_mul_no_files=args.map_multiplier_no_files,
-        # Pass other relevant args if run_aider_operator needs them
-        encoding=args.encoding,
-    )
-    operator_io.tool_output(f"--- Aider Operator Finished (Exit Code: {exit_code}) ---")
-    # return exit_code
-    # except Exception as e:
-    #     operator_io.tool_error(f"An error occurred during operator execution: {e}")
-    #     if args.verbose:
-    #         traceback.print_exc(file=sys.stderr)
-    #     operator_io.tool_output(f"--- Aider Operator Failed ---")
-    #     return 1
+    try:
+        exit_code = run_aider_operator(
+            user_prompt=args.request,
+            initial_files=initial_abs_files,
+            read_only_files=read_only_abs_files,
+            lcr_model=lcr_model_obj,
+            architect_model=architect_model_obj,
+            operator_io=operator_io,
+            repo=repo,
+            coder_root=coder_root,
+            use_git=use_git,
+            auto_commits=args.auto_commits,
+            dirty_commits=args.dirty_commits,
+            verbose=args.verbose,
+            map_tokens=map_tokens,
+            map_refresh=args.map_refresh,
+            map_mul_no_files=args.map_multiplier_no_files,
+        )
+        operator_io.tool_output(
+            f"--- Aider Operator Finished (Exit Code: {exit_code}) ---"
+        )
+        return exit_code
+    except Exception as e:
+        operator_io.tool_error(f"An error occurred during operator execution: {e}")
+        if args.verbose:
+            traceback.print_exc(file=sys.stderr)
+        operator_io.tool_output(f"--- Aider Operator Failed ---")
+        return 1
 
 
 def setup_git(git_root, io):
@@ -767,5 +766,4 @@ def setup_git(git_root, io):
 
 # Standard entry point guard
 if __name__ == "__main__":
-    # sys.exit(main())
-    main()
+    sys.exit(main())

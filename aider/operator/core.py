@@ -183,110 +183,94 @@ def run_aider_operator(
     map_tokens: int,
     map_refresh: str,
     map_mul_no_files: float,
-    encoding: str,  # Added
 ) -> int:
     """
     Runs the core Aider operator process using pre-configured components.
     Returns 0 on success, 1 on failure.
     """
-
-    # --- Phase 1: Large Context Retriever ---
-    operator_io.tool_output("\n--- Phase 1: Large Context Retriever ---")
-    lcr_coder = Coder.create(
-        main_model=lcr_model,
-        edit_format="large_context_retriever",
-        io=operator_io,
-        repo=repo,
-        fnames=initial_files,
-        read_only_fnames=read_only_files,  # Pass read-only files
-        verbose=verbose,
-        use_git=use_git,  # Use passed parameter
-        stream=False,  # LCR usually doesn't stream well
-        map_tokens=map_tokens,  # Use passed parameter
-        map_refresh=map_refresh,  # Use passed parameter
-        map_mul_no_files=map_mul_no_files,  # Use passed parameter
-        # Other relevant defaults from Coder.create will apply
-    )
-
-    # Run LCR - use coder.run()
-    lcr_coder.run(with_message=user_prompt)
-
-    # Get files identified by LCR to potentially pass or log
-    # Note: LCR edit format adds files directly to the chat context
-    identified_files_rel = lcr_coder.get_inchat_relative_files()
-    if not identified_files_rel:
-        operator_io.tool_warning(
-            "LCR phase did not explicitly add files to chat. Proceeding with initial/repo context."
+    try:
+        # --- Phase 1: Large Context Retriever ---
+        operator_io.tool_output("\n--- Phase 1: Large Context Retriever ---")
+        lcr_coder = Coder.create(
+            main_model=lcr_model,
+            edit_format="large_context_retriever",
+            io=operator_io,
+            repo=repo,
+            fnames=initial_files,
+            read_only_fnames=read_only_files,  # Pass read-only files
+            verbose=verbose,
+            use_git=use_git,  # Use passed parameter
+            stream=False,  # LCR usually doesn't stream well
+            map_tokens=map_tokens,  # Use passed parameter
+            map_refresh=map_refresh,  # Use passed parameter
+            map_mul_no_files=map_mul_no_files,  # Use passed parameter
+            # Other relevant defaults from Coder.create will apply
         )
-    else:
-        operator_io.tool_output(f"LCR added files to context: {identified_files_rel}")
 
-    # Optional: Output the repo map after LCR run (might be updated)
-    if verbose and repo:
-        repo_map_content = lcr_coder.get_repo_map()
-        if repo_map_content:
-            operator_io.tool_output(f"Repo map after LCR:\n{repo_map_content}")
-        else:
-            operator_io.tool_output("Repo map is disabled or empty after LCR.")
+        # Run LCR - use coder.run()
+        lcr_coder.run(with_message=user_prompt)
 
-    # --- Phase 2: Architect / Editor ---
-    operator_io.tool_output("\n--- Phase 2: Architect/Editor ---")
-
-    architect_coder = Coder.create(
-        main_model=architect_model,
-        edit_format="architect",
-        from_coder=lcr_coder,  # Inherit state (files, repo, io, encoding etc.)
-        # Explicitly override specific settings needed for this phase:
-        io=operator_io,  # Ensure it uses the operator IO
-        repo=repo,  # Pass repo again (though from_coder should handle)
-        auto_accept_architect=True,  # Essential for operator
-        auto_commits=auto_commits,  # Use passed parameter
-        dirty_commits=dirty_commits,  # Use passed parameter
-        show_diffs=verbose,  # Show diffs only if verbose
-        verbose=verbose,
-        use_git=use_git,  # Use passed parameter
-        stream=True,  # Allow streaming for this phase (handled by OperatorIO)
-        map_tokens=map_tokens,  # Use passed parameter
-        map_refresh=map_refresh,  # Use passed parameter
-        map_mul_no_files=map_mul_no_files,  # Use passed parameter
-    )
-
-    # Construct the prompt for the architect phase
-    # No need to explicitly mention LCR files, they are in the context
-    architect_prompt = (
-        f"Based on the provided file context, please address the following request:\n\n"
-        f"{user_prompt}\n\n"
-        f"Design the changes if necessary, then implement them using the editor format."
-    )
-    if verbose:
-        operator_io.tool_output(f"\nPrompting Architect:\n{architect_prompt}\n")
-
-    # Run the architect coder (triggers architect -> editor flow)
-    architect_coder.run(with_message=architect_prompt)
-
-    # --- Completion ---
-    operator_io.tool_output("\n--- Operator Execution Summary ---")
-
-    if architect_coder.aider_edited_files:
-        operator_io.tool_output(
-            f"Files potentially edited: {architect_coder.aider_edited_files}"
-        )
-        # Check commit status if applicable
-        if repo and architect_coder.last_aider_commit_hash and auto_commits:
-            operator_io.tool_output(
-                f"Last Aider commit: {architect_coder.last_aider_commit_hash} - {architect_coder.last_aider_commit_message}"
-            )
-        elif repo and auto_commits and architect_coder.aider_edited_files:
-            # Files were edited, auto-commits enabled, but no hash recorded
+        # Get files identified by LCR to potentially pass or log
+        # Note: LCR edit format adds files directly to the chat context
+        identified_files_rel = lcr_coder.get_inchat_relative_files()
+        if not identified_files_rel:
             operator_io.tool_warning(
-                "Changes might have been applied, but commit might have failed or was skipped (e.g., --dry-run in coder?)."
+                "LCR phase did not explicitly add files to chat. Proceeding with initial/repo context."
             )
-        elif not auto_commits and architect_coder.aider_edited_files:
-            operator_io.tool_output("Changes applied (auto-commits disabled).")
+        else:
+            operator_io.tool_output(
+                f"LCR added files to context: {identified_files_rel}"
+            )
 
-    else:
-        operator_io.tool_output(
-            "No files appear to have been edited by the architect/editor phase."
+        # Optional: Output the repo map after LCR run (might be updated)
+        if verbose and repo:
+            repo_map_content = lcr_coder.get_repo_map()
+            if repo_map_content:
+                operator_io.tool_output(f"Repo map after LCR:\n{repo_map_content}")
+            else:
+                operator_io.tool_output("Repo map is disabled or empty after LCR.")
+
+        # --- Phase 2: Architect / Editor ---
+        operator_io.tool_output("\n--- Phase 2: Architect/Editor ---")
+
+        architect_coder = Coder.create(
+            main_model=architect_model,
+            edit_format="architect",
+            from_coder=lcr_coder,  # Inherit state (files, repo, io, encoding etc.)
+            # Explicitly override specific settings needed for this phase:
+            io=operator_io,  # Ensure it uses the operator IO
+            repo=repo,  # Pass repo again (though from_coder should handle)
+            auto_accept_architect=True,  # Essential for operator
+            auto_commits=auto_commits,  # Use passed parameter
+            dirty_commits=dirty_commits,  # Use passed parameter
+            show_diffs=verbose,  # Show diffs only if verbose
+            verbose=verbose,
+            use_git=use_git,  # Use passed parameter
+            stream=True,  # Allow streaming for this phase (handled by OperatorIO)
+            map_tokens=map_tokens,  # Use passed parameter
+            map_refresh=map_refresh,  # Use passed parameter
+            map_mul_no_files=map_mul_no_files,  # Use passed parameter
         )
 
-    return 0  # Indicate success
+        # Construct the prompt for the architect phase
+        # No need to explicitly mention LCR files, they are in the context
+        architect_prompt = (
+            f"Based on the provided file context, please address the following request:\n\n"
+            f"{user_prompt}\n\n"
+            f"Design the changes if necessary, then implement them using the editor format."
+        )
+        if verbose:
+            operator_io.tool_output(f"\nPrompting Architect:\n{architect_prompt}\n")
+
+        architect_coder.run_one(user_message=architect_prompt, preproc=True)
+
+        # --- Completion ---
+        operator_io.tool_output("\n--- Operator Execution Summary ---")
+
+        return 0  # Indicate success
+
+    except Exception as e:
+        operator_io.tool_error(f"An error occurred during operator execution: {e}")
+        if verbose:
+            traceback.print_exc(file=sys.stderr)
+        return 1  # Indicate failure
