@@ -1156,18 +1156,13 @@ class Coder:
         platform_text = self.get_platform_info()
 
         if self.suggest_shell_commands:
-<<<<<<< HEAD
             shell_cmd_prompt = self.gpt_prompts.shell_cmd_prompt.format(
                 platform=platform_text
             )
             shell_cmd_reminder = self.gpt_prompts.shell_cmd_reminder.format(
                 platform=platform_text
             )
-=======
-            shell_cmd_prompt = self.gpt_prompts.shell_cmd_prompt.format(platform=platform_text)
-            shell_cmd_reminder = self.gpt_prompts.shell_cmd_reminder.format(platform=platform_text)
             rename_with_shell = self.gpt_prompts.rename_with_shell
->>>>>>> upstream/main
         else:
             shell_cmd_prompt = self.gpt_prompts.no_shell_cmd_prompt.format(
                 platform=platform_text
