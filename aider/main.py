@@ -30,6 +30,7 @@ from aider.history import ChatSummary
 from aider.io import InputOutput
 from aider.llm import litellm  # noqa: F401; properly init litellm on launch
 from aider.models import ModelSettings
+from aider.onboarding import offer_openrouter_oauth, select_default_model
 from aider.repo import ANY_GIT_ERROR, GitRepo
 from aider.report import report_uncaught_exceptions
 from aider.versioncheck import check_version, install_from_main_branch, install_upgrade
@@ -365,11 +366,21 @@ def register_models(git_root, model_settings_fname, io, verbose=False):
 
 
 def load_dotenv_files(git_root, dotenv_fname, encoding="utf-8"):
+    # Standard .env file search path
     dotenv_files = generate_search_path_list(
         ".env",
         git_root,
         dotenv_fname,
     )
+
+    # Explicitly add the OAuth keys file to the beginning of the list
+    oauth_keys_file = Path.home() / ".aider" / "oauth-keys.env"
+    if oauth_keys_file.exists():
+        # Insert at the beginning so it's loaded first (and potentially overridden)
+        dotenv_files.insert(0, str(oauth_keys_file.resolve()))
+        # Remove duplicates if it somehow got included by generate_search_path_list
+        dotenv_files = list(dict.fromkeys(dotenv_files))
+
     loaded = []
     for fname in dotenv_files:
         try:
@@ -774,26 +785,49 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
             alias, model = parts
             models.MODEL_ALIASES[alias.strip()] = model.strip()
 
-    if not args.model:
-        # Select model based on available API keys
-        model_key_pairs = [
-            ("ANTHROPIC_API_KEY", "sonnet"),
-            ("DEEPSEEK_API_KEY", "deepseek"),
-            ("OPENROUTER_API_KEY", "openrouter/anthropic/claude-3.7-sonnet"),
-            ("OPENAI_API_KEY", "gpt-4o"),
-            ("GEMINI_API_KEY", "flash"),
-        ]
+    selected_model_name = select_default_model(args, io, analytics)
+    if not selected_model_name:
+        # Error message and analytics event are handled within select_default_model
+        # It might have already offered OAuth if no model/keys were found.
+        # If it failed here, we exit.
+        return 1
+    args.model = selected_model_name  # Update args with the selected model
 
-        for env_key, model_name in model_key_pairs:
-            if os.environ.get(env_key):
-                args.model = model_name
-                io.tool_warning(
-                    f"Found {env_key} so using {model_name} since no --model was specified."
+    # Check if an OpenRouter model was selected/specified but the key is missing
+    if args.model.startswith("openrouter/") and not os.environ.get("OPENROUTER_API_KEY"):
+        io.tool_warning(
+            f"The specified model '{args.model}' requires an OpenRouter API key, which was not"
+            " found."
+        )
+        # Attempt OAuth flow because the specific model needs it
+        if offer_openrouter_oauth(io, analytics):
+            # OAuth succeeded, the key should now be in os.environ.
+            # Check if the key is now present after the flow.
+            if os.environ.get("OPENROUTER_API_KEY"):
+                io.tool_output(
+                    "OpenRouter successfully connected."
+                )  # Inform user connection worked
+            else:
+                # This case should ideally not happen if offer_openrouter_oauth succeeded
+                # but check defensively.
+                io.tool_error(
+                    "OpenRouter authentication seemed successful, but the key is still missing."
                 )
-                break
-        if not args.model:
-            io.tool_error("You need to specify a --model and an --api-key to use.")
-            io.offer_url(urls.models_and_keys, "Open documentation url for more info?")
+                analytics.event(
+                    "exit",
+                    reason="OpenRouter key missing after successful OAuth for specified model",
+                )
+                return 1
+        else:
+            # OAuth failed or was declined by the user
+            io.tool_error(
+                f"Unable to proceed without an OpenRouter API key for model '{args.model}'."
+            )
+            io.offer_url(urls.models_and_keys, "Open documentation URL for more info?")
+            analytics.event(
+                "exit",
+                reason="OpenRouter key missing for specified model and OAuth failed/declined",
+            )
             return 1
 
     main_model = models.Model(
@@ -849,7 +883,7 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
                 )
 
     if args.copy_paste and args.edit_format is None:
-        if main_model.edit_format in ("diff", "whole"):
+        if main_model.edit_format in ("diff", "whole", "diff-fenced"):
             main_model.edit_format = "editor-" + main_model.edit_format
 
     if args.verbose:
@@ -947,6 +981,9 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
         map_tokens = main_model.get_repo_map_tokens()
     else:
         map_tokens = args.map_tokens
+
+    # Track auto-commits configuration
+    analytics.event("auto_commits", enabled=bool(args.auto_commits))
 
     try:
         coder = Coder.create(
@@ -1093,6 +1130,9 @@ def main(argv=None, input=None, output=None, force_git_root=None, return_coder=F
 
         io.tool_output(f"Cur working dir: {Path.cwd()}")
         io.tool_output(f"Git working dir: {git_root}")
+
+    if args.stream and args.cache_prompts:
+        io.tool_warning("Cost estimates may be inaccurate when using streaming and caching.")
 
     if args.load:
         commands.cmd_load(args.load)

@@ -88,9 +88,14 @@ MODEL_ALIASES = {
     "3": "gpt-3.5-turbo",
     # Other models
     "deepseek": "deepseek/deepseek-chat",
-    "r1": "deepseek/deepseek-reasoner",
     "flash": "gemini/gemini-2.0-flash-exp",
+    "quasar": "openrouter/openrouter/quasar-alpha",
+    "r1": "deepseek/deepseek-reasoner",
     "gemini-2.5-pro": "gemini/gemini-2.5-pro-exp-03-25",
+    "gemini": "gemini/gemini-2.5-pro-preview-03-25",
+    "gemini-exp": "gemini/gemini-2.5-pro-exp-03-25",
+    "grok3": "xai/grok-3-beta",
+    "optimus": "openrouter/openrouter/optimus-alpha",
 }
 # Model metadata loaded from resources and user's files.
 
@@ -322,7 +327,11 @@ class Model(ModelSettings):
             self.apply_generic_model_settings(model)
 
         # Apply override settings last if they exist
-        if self.extra_model_settings and self.extra_model_settings.extra_params:
+        if (
+            self.extra_model_settings
+            and self.extra_model_settings.extra_params
+            and self.extra_model_settings.name == "aider/extra_params"
+        ):
             # Initialize extra_params if it doesn't exist
             if not self.extra_params:
                 self.extra_params = {}
@@ -344,8 +353,23 @@ class Model(ModelSettings):
             self.use_repo_map = True
             self.use_temperature = False
             self.system_prompt_prefix = "Formatting re-enabled. "
+            self.system_prompt_prefix = "Formatting re-enabled. "
             if "reasoning_effort" not in self.accepts_settings:
                 self.accepts_settings.append("reasoning_effort")
+            return  # <--
+
+        if "gpt-4.1-mini" in model:
+            self.edit_format = "diff"
+            self.use_repo_map = True
+            self.reminder = "sys"
+            self.examples_as_sys_msg = False
+            return  # <--
+
+        if "gpt-4.1" in model:
+            self.edit_format = "diff"
+            self.use_repo_map = True
+            self.reminder = "sys"
+            self.examples_as_sys_msg = False
             return  # <--
 
         if "/o1-mini" in model:
@@ -498,6 +522,8 @@ class Model(ModelSettings):
 
         if not self.editor_edit_format:
             self.editor_edit_format = self.editor_model.edit_format
+            if self.editor_edit_format in ("diff", "whole", "diff-fenced"):
+                self.editor_edit_format = "editor-" + self.editor_edit_format
 
         return self.editor_model
 
@@ -720,23 +746,24 @@ class Model(ModelSettings):
                     "budget_tokens": num_tokens,
                 }
 
-    def get_thinking_tokens(self, model):
+    def get_raw_thinking_tokens(self):
         """Get formatted thinking token budget if available"""
         budget = None
 
-        if model.extra_params:
+        if self.extra_params:
             # Check for OpenRouter reasoning format
-            if (
-                "reasoning" in model.extra_params
-                and "max_tokens" in model.extra_params["reasoning"]
-            ):
-                budget = model.extra_params["reasoning"]["max_tokens"]
+            if "reasoning" in self.extra_params and "max_tokens" in self.extra_params["reasoning"]:
+                budget = self.extra_params["reasoning"]["max_tokens"]
             # Check for standard thinking format
             elif (
-                "thinking" in model.extra_params
-                and "budget_tokens" in model.extra_params["thinking"]
+                "thinking" in self.extra_params and "budget_tokens" in self.extra_params["thinking"]
             ):
-                budget = model.extra_params["thinking"]["budget_tokens"]
+                budget = self.extra_params["thinking"]["budget_tokens"]
+
+        return budget
+
+    def get_thinking_tokens(self):
+        budget = self.get_raw_thinking_tokens()
 
         if budget is not None:
             # Format as xx.yK for thousands, xx.yM for millions
@@ -754,14 +781,14 @@ class Model(ModelSettings):
                     return f"{value:.1f}k"
         return None
 
-    def get_reasoning_effort(self, model):
+    def get_reasoning_effort(self):
         """Get reasoning effort value if available"""
         if (
-            model.extra_params
-            and "extra_body" in model.extra_params
-            and "reasoning_effort" in model.extra_params["extra_body"]
+            self.extra_params
+            and "extra_body" in self.extra_params
+            and "reasoning_effort" in self.extra_params["extra_body"]
         ):
-            return model.extra_params["extra_body"]["reasoning_effort"]
+            return self.extra_params["extra_body"]["reasoning_effort"]
         return None
 
     def is_deepseek_r1(self):
